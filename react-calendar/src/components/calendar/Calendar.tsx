@@ -3,10 +3,40 @@ import './Calendar.css'
 
 type CalendarMode = "day" | "month" | "year"
 
+interface CalendarEvent {
+    startDate: Date,
+    endDate: Date,
+    title: string,
+    description?: string,
+    color?: string
+}
+
 export function Calendar() {
 
+    const testEvent0: CalendarEvent = {
+        startDate: new Date(1996, 9, 27, 2),
+        endDate: new Date(1996, 9, 27, 2),
+        title: "L'inizio",
+        color: '#5e03fc'
+    }
+
+    const testEvent1: CalendarEvent = {
+        startDate: new Date(2024, 1, 25, 4),
+        endDate: new Date(2024, 2, 1, 16),
+        title: "Test Event 1",
+        color: '#ff0000'
+    }
+
+    const testEvent2: CalendarEvent = {
+        startDate: new Date(2024, 1, 20, 13),
+        endDate: new Date(2024, 2, 5, 18),
+        title: "Test Event 2",
+        color: '#0000ff'
+    }
+
     const [date, setDate] = useState(new Date(new Date().setDate(1)));
-    const [mode, setMode] = useState<CalendarMode>("month")
+    const [mode, setMode] = useState<CalendarMode>("month");
+    const [events, setEvents] = useState<CalendarEvent[]>([testEvent0, testEvent1, testEvent2]);
 
     const prev = () => {
         let newDate;
@@ -40,8 +70,27 @@ export function Calendar() {
         setDate(newDate);
     }
 
-    const getMonthString = (from = date) => {
-        const opt: Intl.DateTimeFormatOptions = { month: 'long' };
+    const addEvent = (eventId: any, startDate: Date, endDate: Date, title: string, description?: string) => {
+        const event: CalendarEvent = {startDate: startDate, endDate: endDate, title: title, description: description};
+        setEvents([...events, event]);
+    }
+
+    const getEvents = (date: Date, checkHours: boolean = false, from = events) => {
+        const checkDate = checkHours ? date : new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0);
+        return from.filter(event => {
+            return checkHours ? event.startDate.getTime() <= checkDate.getTime() && event.endDate.getTime() >= checkDate.getTime() : 
+                                new Date(event.startDate).setHours(0) <= checkDate.getTime() && new Date(event.endDate).setHours(0) >= checkDate.getTime()
+        });
+    }
+
+    const getMonthEvents = (month: number) => {
+        return events.filter(event => {
+            return event.startDate.getMonth() === month || event.endDate.getMonth() === month;
+        })
+    }
+
+    const getMonthString = (from = date, format: "long" | "short" | "narrow" | "numeric" | "2-digit" = 'long' ) => {
+        const opt: Intl.DateTimeFormatOptions = { month: format };
         let monthStr = from.toLocaleDateString(undefined, opt);
         return monthStr.charAt(0).toUpperCase() + monthStr.substring(1);
     }
@@ -73,18 +122,27 @@ export function Calendar() {
         return getDayString(new Date(date.setDate(i+1))).toUpperCase();
     });
 
+    const randomRGB = () => {
+        return `rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255})`;
+    }
+
     const DayView = (date: Date) => {
+
+        const dayEvents = getEvents(date);
         
         return (
         <div className='day-view'>
             {Array.apply(null, Array(24)).map((v, hour) => {
 
-                const hourDate = new Date(date.setHours(hour));
+                const hourDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour);
                 const hourStr = getHourString(hourDate);
+                const hourEvents = getEvents(hourDate, true, dayEvents);
 
                 return (
                     <div className='hour' data-hour={hourStr} key={date.getTime() + "-" + hour}>
-                        
+                        {hourEvents.map((event, i) => {
+                            return i < 12 && <p key={`${event.title}-${hour}`}>{event.title}</p> // 12 is the max rappresentable events in a day cell
+                        })}
                     </div>
                 )
             })}
@@ -100,16 +158,16 @@ export function Calendar() {
                 {
                     months.map((date: Date) => {
                         return(
-                            <div key={date.getTime()}>
+                            <div key={date.getTime()} onClick={() => setMonthMode(date)} style={{cursor: 'pointer'}}>
                                 <p
                                     style={{
                                         fontWeight: '800',
-                                        cursor: 'pointer'
+                                        fontSize: '1.5em',
+                                        margin: '.5em'
                                     }}
-                                    onClick={() => setMonthMode(date)}
-                                >{getMonthString(date)}</p>
+                                >{getMonthString(date, 'short').toUpperCase()}</p>
                                 <div style={{pointerEvents: "none"}}>
-                                    {MonthGrid(date, true, false)}
+                                    {MonthGrid(date, false, false, false)}
                                 </div>
                                 
                             </div>
@@ -121,9 +179,9 @@ export function Calendar() {
 
     }
 
-    const MonthGrid = (date: Date, showOtherMonths: boolean = true, showDaysName: boolean = true) => {
+    const MonthGrid = (date: Date, showOtherMonths: boolean = true, showDaysName: boolean = true, showEvents: boolean = true) => {
 
-        const normDate = new Date(date.setDate(1)); // normalized at first of the month
+        const normDate = new Date(date.getFullYear(), date.getMonth(), 1); // normalized at first of the month
         const startDate = normDate.getDay() === 0 ? 7 : normDate.getDay();
         const monthLastDate = (new Date(date.getFullYear(), date.getMonth()+1, 0)).getDate();
         const prevMonthLastDate = (new Date(date.getFullYear(), date.getMonth(), 0)).getDate();
@@ -142,70 +200,44 @@ export function Calendar() {
                 prevMonth: i+1 < startDate,
                 nextMonth: i+1 > monthLastDate +  (startDate - 1)
             };
-            loopDate = new Date(loopDate.setDate(loopDate.getDate() + 1));
+            loopDate.setDate(loopDate.getDate() + 1);
             return d;
         });
 
-        /*const days = Array.apply(null, Array(calendarRows*7)).map((v, i) => { 
-
-            let index = i + 1;
-
-            if (index < startDate) {
-                return prevMonthLastDate - (startDate - 1) + index;
-            }
-            else if (index >= startDate && index < monthLastDate+startDate) {
-                return index - (startDate - 1)
-            }
-            else {
-                return index - (monthLastDate+startDate) + 1;
-            }
-        });
+        const monthEvents = getMonthEvents(date.getMonth());
 
         return (
             <div className='calendar-grid'>
                 {
                     showDaysName && dayStrs.map((day, i) => {
-                        return <div key={i} className={`day-cell disabled day-name ${i+1 > 5 ? 'weekend' : ''}`}>{day}</div>
+                        return <div key={i} className={`day-name ${i+1 > 5 ? 'weekend' : ''}`}>{day}</div>
                     })
                 }
                 {
                     days.map((day, i) => {
 
-                        if (i+1 >= startDate && i+1 < monthLastDate+startDate) {
-                            return (
-                            <div className='day-cell' key={`${date.getFullYear()}-${date.getMonth()}-${day}`}>
-                                {day}
-                            </div>
-                            )
-                        }
-                        else {
-                            const key = `${date.getFullYear()}-${day < 14 ? date.getMonth()+1 : date.getMonth()+1}-${day}`
-                            return (
-                                <div className='day-cell disabled' key={key}>{showOtherMonths ? day : ""}</div>
-                            )
-                        }
-                    })
-                }
-            </div>
-        )*/
-
-
-        return (
-            <div className='calendar-grid'>
-                {
-                    showDaysName && dayStrs.map((day, i) => {
-                        return <div key={i} className={`day-cell disabled day-name ${i+1 > 5 ? 'weekend' : ''}`}>{day}</div>
-                    })
-                }
-                {
-                    days.map((day, i) => {
+                        
+                        const dayEvents = (
+                            <div className='day-events'>
+                                {getEvents(day.date, false, monthEvents).map(event => {
+                                    //return <div key={event.title} style={{backgroundColor: day.nextMonth || day.prevMonth ? '#c8c8c8' : event.color ?? '#000'}}></div>
+                                    return <div key={event.title} style={{backgroundColor: event.color ?? '#000'}}></div>
+                                })}
+                            </div>);
+                        
+                        const isWeekend = i%7+1 > 5;
 
                         if (day.prevMonth || day.nextMonth) {
-                            return <div className='day-cell disabled' key={day.date.getTime()}>{showOtherMonths ? day.date.getDate() : ""}</div>
+                            return (showOtherMonths ? 
+                                <div className={`day-cell disabled ${isWeekend && 'weekend'}`} key={day.date.getTime()} onClick={() => setDayMode(day.date)}>
+                                    {showEvents && dayEvents}{day.date.getDate()}
+                                </div> : 
+                                <div></div>)
                         }
                         else {
                             return (
-                                <div className='day-cell' key={day.date.getTime()} onClick={() => setDayMode(day.date)}>
+                                <div className={`day-cell ${isWeekend && 'weekend'}`} key={day.date.getTime()} onClick={() => setDayMode(day.date)}>
+                                    {showEvents && dayEvents}
                                     {day.date.getDate()}
                                 </div>
                             )
