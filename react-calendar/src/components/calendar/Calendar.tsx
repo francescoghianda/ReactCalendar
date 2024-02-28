@@ -1,42 +1,21 @@
 import { useState } from 'react'
 import './Calendar.css'
+import { CalendarEvent, EventID } from './CalendarEvent'
 
 type CalendarMode = "day" | "month" | "year"
 
-interface CalendarEvent {
-    startDate: Date,
-    endDate: Date,
-    title: string,
-    description?: string,
-    color?: string
+export interface CalendarProps {
+    events: CalendarEvent[];
+    showPrevAndNextMonth?: boolean;
+    onEventClick?: (event: CalendarEvent) => void;
 }
 
-export function Calendar() {
-
-    const testEvent0: CalendarEvent = {
-        startDate: new Date(1996, 9, 27, 2),
-        endDate: new Date(1996, 9, 27, 2),
-        title: "L'inizio",
-        color: '#5e03fc'
-    }
-
-    const testEvent1: CalendarEvent = {
-        startDate: new Date(2024, 1, 25, 4),
-        endDate: new Date(2024, 2, 1, 16),
-        title: "Test Event 1",
-        color: '#ff0000'
-    }
-
-    const testEvent2: CalendarEvent = {
-        startDate: new Date(2024, 1, 20, 13),
-        endDate: new Date(2024, 2, 5, 18),
-        title: "Test Event 2",
-        color: '#0000ff'
-    }
+export function Calendar(props: CalendarProps) {
 
     const [date, setDate] = useState(new Date(new Date().setDate(1)));
     const [mode, setMode] = useState<CalendarMode>("month");
-    const [events, setEvents] = useState<CalendarEvent[]>([testEvent0, testEvent1, testEvent2]);
+    //const [events, setEvents] = useState<CalendarEvent[]>([testEvent0, testEvent1, testEvent2]);
+    const events = props.events;
 
     const prev = () => {
         let newDate;
@@ -70,10 +49,6 @@ export function Calendar() {
         setDate(newDate);
     }
 
-    const addEvent = (eventId: any, startDate: Date, endDate: Date, title: string, description?: string) => {
-        const event: CalendarEvent = {startDate: startDate, endDate: endDate, title: title, description: description};
-        setEvents([...events, event]);
-    }
 
     const getEvents = (date: Date, checkHours: boolean = false, from = events) => {
         const checkDate = checkHours ? date : new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0);
@@ -83,9 +58,14 @@ export function Calendar() {
         });
     }
 
-    const getMonthEvents = (month: number) => {
+    const getMonthEvents = (month: number, year: number) => {
+        const date = new Date(year, month);
+        
         return events.filter(event => {
-            return event.startDate.getMonth() === month || event.endDate.getMonth() === month;
+            const eventStartDate = new Date(event.startDate.getFullYear(), event.startDate.getMonth());
+            const eventEndDate = new Date(event.endDate.getFullYear(), event.endDate.getMonth());
+
+            return date.getTime() >= eventStartDate.getTime() && date.getTime() <= eventEndDate.getTime();
         })
     }
 
@@ -122,10 +102,6 @@ export function Calendar() {
         return getDayString(new Date(date.setDate(i+1))).toUpperCase();
     });
 
-    const randomRGB = () => {
-        return `rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255})`;
-    }
-
     const DayView = (date: Date) => {
 
         const dayEvents = getEvents(date);
@@ -139,10 +115,22 @@ export function Calendar() {
                 const hourEvents = getEvents(hourDate, true, dayEvents);
 
                 return (
-                    <div className='hour' data-hour={hourStr} key={date.getTime() + "-" + hour}>
-                        {hourEvents.map((event, i) => {
-                            return i < 12 && <p key={`${event.title}-${hour}`}>{event.title}</p> // 12 is the max rappresentable events in a day cell
-                        })}
+                    <div className='hour' key={date.getTime() + "-" + hour}>
+                        <span style={{position:'sticky', top:'-3.8em', height:'100px'}}>{hourStr}</span>
+                        
+                        <div className='hour-events'>
+                            {hourEvents.map((event, i) => {
+                                return  (<div style={{border:`1px solid ${event.color ?? '#000'}`}}
+                                            onClick={(e) => {
+                                                props.onEventClick?.(event);
+                                                e.stopPropagation();
+                                            }}
+                                            key={`${event.id}-${hour}`}
+                                        >
+                                            <p>{event.title}</p>
+                                        </div>)
+                            })}
+                        </div>
                     </div>
                 )
             })}
@@ -156,9 +144,9 @@ export function Calendar() {
         return (
             <div className='year-grid'>
                 {
-                    months.map((date: Date) => {
+                    months.map((date: Date, i) => {
                         return(
-                            <div key={date.getTime()} onClick={() => setMonthMode(date)} style={{cursor: 'pointer'}}>
+                            <div key={`month-${i}`} onClick={() => setMonthMode(date)} style={{cursor: 'pointer'}}>
                                 <p
                                     style={{
                                         fontWeight: '800',
@@ -204,7 +192,7 @@ export function Calendar() {
             return d;
         });
 
-        const monthEvents = getMonthEvents(date.getMonth());
+        const monthEvents = showEvents ? getMonthEvents(date.getMonth(), date.getFullYear()) : [];
 
         return (
             <div className='calendar-grid'>
@@ -217,11 +205,20 @@ export function Calendar() {
                     days.map((day, i) => {
 
                         
-                        const dayEvents = (
+                        const dayEvents = showEvents && (
                             <div className='day-events'>
-                                {getEvents(day.date, false, monthEvents).map(event => {
-                                    //return <div key={event.title} style={{backgroundColor: day.nextMonth || day.prevMonth ? '#c8c8c8' : event.color ?? '#000'}}></div>
-                                    return <div key={event.title} style={{backgroundColor: event.color ?? '#000'}}></div>
+                                {getEvents(day.date, false, monthEvents).map((event, i) => {
+                                    // 12 is the max rappresentable events in a day cell
+                                    return i < 12 && (  <div key={event.id} style={{backgroundColor: event.color ?? '#000'}}
+                                                            onClick={(e) => {
+                                                                props.onEventClick?.(event)
+                                                                e.stopPropagation()
+                                                            }}
+                                                        > 
+                                                            <div className='tooltip'>
+                                                                <p>{event.title}</p>
+                                                            </div>
+                                                        </div>)
                                 })}
                             </div>);
                         
@@ -232,7 +229,7 @@ export function Calendar() {
                                 <div className={`day-cell disabled ${isWeekend && 'weekend'}`} key={day.date.getTime()} onClick={() => setDayMode(day.date)}>
                                     {showEvents && dayEvents}{day.date.getDate()}
                                 </div> : 
-                                <div></div>)
+                                <div key={day.date.getTime()}></div>)
                         }
                         else {
                             return (
@@ -273,7 +270,7 @@ export function Calendar() {
         if (mode === "year") {
             return (
                 <>
-                    <p style={{cursor: "pointer"}}> {date.getFullYear()} </p>
+                    <p> {date.getFullYear()} </p>
                 </>
             )
         }
@@ -283,7 +280,7 @@ export function Calendar() {
     const CalendarBody = () => {
         if (mode === "day") return DayView(date);
 
-        if (mode === "month") return MonthGrid(date)
+        if (mode === "month") return MonthGrid(date, props.showPrevAndNextMonth ?? true)
 
         if (mode === "year") return YearGrid(date)
     }
